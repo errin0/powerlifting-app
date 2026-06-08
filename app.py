@@ -1,294 +1,181 @@
-import streamlit as st
-import pandas as pd
-import math
-import streamlit.components.v1 as components
-import json
+import tkinter as tk
+from tkinter import ttk
 
-# Page Configuration
-st.set_page_config(
-    page_title="Dynamic Powerlifting Tracker",
-    page_icon="🏋️‍♂️",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
+class Beginner531App:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("5/3/1 Beginner Mobile-Style Tracker")
+        self.root.geometry("450x700")
+        self.root.configure(bg="#0f172a")  # Dark Slate Background
 
-# Custom Styling for Gym Interface
-st.markdown("""
-    <style>
-    .main-title { font-size: 2.5rem; font-weight: bold; color: #2C4A5E; text-align: center; margin-bottom: 5px; }
-    .sub-title { font-size: 1.1rem; color: #555; text-align: center; margin-bottom: 25px; }
-    .section-header { font-size: 1.5rem; font-weight: bold; color: #1C2E3A; border-bottom: 2px solid #4A708B; padding-bottom: 5px; margin-top: 20px; }
-    .warmup-text { color: #B8860B; font-style: italic; }
-    </style>
-""", unsafe_allow_html=True)
-
-st.markdown("<div class='main-title'>🏋️‍♂️ 8-Week Dynamic Powerlifting App</div>", unsafe_allow_html=True)
-st.markdown("<div class='sub-title'>Auto-regulated warmups, progressive main lifts, and daily dynamic accessories</div>", unsafe_allow_html=True)
-
-
-# --- PERSISTENCE LAYER: LOCALSTORAGE INJECTION ---
-# Define default fallbacks
-default_settings = {"unit": "lbs", "squat": 315, "bench": 225, "deadlift": 405}
-
-# JavaScript to read from and write to localStorage via browser communications
-js_persistence = """
-<script>
-    const sendToStreamlit = () => {
-        const data = {
-            unit: localStorage.getItem('pref_unit') || 'lbs',
-            squat: parseInt(localStorage.getItem('squat_1rm')) || 315,
-            bench: parseInt(localStorage.getItem('bench_1rm')) || 225,
-            deadlift: parseInt(localStorage.getItem('deadlift_1rm')) || 405
-        };
+        # Custom Dark Theme Styles
+        self.style = ttk.Style()
+        self.style.theme_use('clam')
+        self.style.configure("TLabel", background="#0f172a", foreground="#f8fafc", font=("Segoe UI", 10))
+        self.style.configure("TCombobox", fieldbackground="#334155", background="#1e293b", foreground="#ffffff")
         
-        // Return values to parent Streamlit application
-        window.parent.postMessage({
-            type: 'streamlit:setComponentValue',
-            value: data
-        }, '*');
-    };
+        # Program Configurations
+        self.week_data = {
+            "Week 1 (5/5/5)": {"w": [0.4, 0.5, 0.6], "s": [0.65, 0.75, 0.85], "reps": ["5", "5", "5+"], "fsl": 0.65},
+            "Week 2 (3/3/3)": {"w": [0.4, 0.5, 0.6], "s": [0.70, 0.80, 0.90], "reps": ["3", "3", "3+"], "fsl": 0.70},
+            "Week 3 (5/3/1)": {"w": [0.4, 0.5, 0.6], "s": [0.75, 0.85, 0.95], "reps": ["5", "3", "1+"], "fsl": 0.75},
+            "Week 4 (Deload)": {"w": [0.4, 0.5, 0.6], "s": [0.40, 0.50, 0.60], "reps": ["5", "5", "5"], "fsl": None}
+        }
 
-    // Run when the component mounts
-    setTimeout(sendToStreamlit, 300);
-</script>
-"""
+        self.accessory_matrix = {
+            "Week 1 (5/5/5)": {
+                "Day 1": [["Lat Pulldowns", "3x8-12", "Pull"], ["Incline DB Press", "3x10-12", "Push"], ["Bulgarian Split Squats", "3x8-10", "Leg/Core"]],
+                "Day 2": [["Barbell Rows", "3x8", "Pull"], ["Dips", "3x10-15", "Push"], ["Hanging Leg Raises", "3x12-15", "Leg/Core"]],
+                "Day 3": [["Face Pulls", "3x15-20", "Pull"], ["DB Shoulder Press", "3x10", "Push"], ["DB Romanian Deadlifts", "3x10-12", "Leg/Core"]]
+            },
+            "Week 2 (3/3/3)": {
+                "Day 1": [["Seated Cable Rows", "3x10-12", "Pull"], ["Push-ups", "3xMax", "Push"], ["Walking Lunges", "3x12/l", "Leg/Core"]],
+                "Day 2": [["DB Single-Arm Rows", "3x10", "Pull"], ["Close-Grip Bench", "3x8-10", "Push"], ["Ab Wheel Rollouts", "3x8-10", "Leg/Core"]],
+                "Day 3": [["Hammer Curls", "3x12", "Pull"], ["Cable Chest Flies", "3x12-15", "Push"], ["Leg Press", "3x10-12", "Leg/Core"]]
+            },
+            "Week 3 (5/3/1)": {
+                "Day 1": [["Chin-ups", "3x6-10", "Pull"], ["Overhead Tricep Ext.", "3x12", "Push"], ["Planks", "3x45-60s", "Leg/Core"]],
+                "Day 2": [["T-Bar Rows", "3x8-10", "Pull"], ["DB Lateral Raises", "3x12-15", "Push"], ["Step-ups onto Bench", "3x10/l", "Leg/Core"]],
+                "Day 3": [["Chest-Supported Rows", "3x10", "Pull"], ["Incline DB Flyes", "3x12", "Push"], ["Leg Curls", "3x10-12", "Leg/Core"]]
+            },
+            "Week 4 (Deload)": {
+                "Day 1": [["Lat Pulldowns (Light)", "2x10", "Pull"], ["Incline DB Press (Light)", "2x10", "Push"], ["Bodyweight Squats", "2x12", "Leg/Core"]],
+                "Day 2": [["Barbell Rows (Light)", "2x8", "Pull"], ["Push-ups (Easy)", "2x10", "Push"], ["Stir the Pot Core", "2x8/s", "Leg/Core"]],
+                "Day 3": [["Face Pulls", "2x15", "Pull"], ["DB Lateral Raises (Light)", "2x10", "Push"], ["Planks", "2x30s", "Leg/Core"]]
+            }
+        }
 
-# Render hidden component to fetch saved storage data
-with st.sidebar:
-    storage_data = components.html(js_persistence, height=0, width=0)
+        # App Setup Initialization
+        self.create_widgets()
+        self.update_workout()
 
-# Setup initial structural variables based on storage results
-if "app_storage" not in st.session_state:
-    st.session_state.app_storage = default_settings
+    def create_widgets(self):
+        # Header Canvas App Bar
+        header = tk.Label(self.root, text="5/3/1 BEGINNER TRACKER", bg="#1e293b", fg="#38bdf8", font=("Segoe UI", 12, "bold"), py=10)
+        header.pack(fill="x")
 
-# Parse changes if storage component responds
-# Note: Streamlit reruns once it grabs local storage metadata
-# --- END PERSISTENCE LAYER ---
+        # ------------------- SECTION 1: 1RM INPUTS -------------------
+        input_frame = tk.LabelFrame(self.root, text=" 1-Rep Max Controls ", bg="#1e293b", fg="#94a3b8", font=("Segoe UI", 9, "bold"), bd=1, padx=10, pady=10)
+        input_frame.pack(fill="x", padx=15, pady=10)
 
+        maxes = [("Squat:", "70"), ("Bench:", "60"), ("Deadlift:", "90"), ("OHP:", "35")]
+        self.inputs = {}
 
-# Sidebar - User Inputs (1RMs)
-st.sidebar.header("🎯 Enter Current 1-Rep Maxes")
-
-# Determine indexes for state synchronization
-unit_idx = 0 if st.session_state.app_storage.get("unit", "lbs") == "lbs" else 1
-
-unit = st.sidebar.radio(
-    "Preferred Weight Unit", 
-    ["lbs", "kg"], 
-    index=unit_idx,
-    key="unit_selector"
-)
-squat_1rm = st.sidebar.number_input(
-    f"Squat 1RM ({unit})", 
-    min_value=0, 
-    value=int(st.session_state.app_storage.get("squat", 315)), 
-    step=5,
-    key="squat_input"
-)
-bench_1rm = st.sidebar.number_input(
-    f"Bench Press 1RM ({unit})", 
-    min_value=0, 
-    value=int(st.session_state.app_storage.get("bench", 225)), 
-    step=5,
-    key="bench_input"
-)
-deadlift_1rm = st.sidebar.number_input(
-    f"Deadlift 1RM ({unit})", 
-    min_value=0, 
-    value=int(st.session_state.app_storage.get("deadlift", 405)), 
-    step=5,
-    key="deadlift_input"
-)
-
-# Actively inject updating values to browser localStorage context transparently
-components.html(f"""
-<script>
-    localStorage.setItem('pref_unit', "{unit}");
-    localStorage.setItem('squat_1rm', "{squat_1rm}");
-    localStorage.setItem('bench_1rm', "{bench_1rm}");
-    localStorage.setItem('deadlift_1rm', "{deadlift_1rm}");
-</script>
-""", height=0, width=0)
-
-
-st.sidebar.markdown("---")
-st.sidebar.markdown("### 📋 Daily Mobility Routine")
-st.sidebar.info("""
-**Mandatory 10-15 Min Warm-Up:**
-1. **Agile 8 Foam Roll** - 5 mins
-2. **World's Greatest Stretch** - 2x5/side
-3. **90/90 Hip Switches** - 2x8/side
-4. **Band Pass-Throughs** - 2x12
-5. **Scapular Pull/Push-ups** - 2x10
-6. **Goblet Squat Hold** - 1x30s
-""")
-
-# Plate rounding function (to nearest 5 lbs/kg)
-def round_weight(weight):
-    return int(math.ceil(weight / 5.0)) * 5 if (weight % 5 >= 2.5) else int(math.floor(weight / 5.0)) * 5
-
-# Program Parameter Maps
-week_configs = {
-    1: {"intensity": 0.70, "sets": 4, "reps": 6, "desc": "Volume Phase - Week 1"},
-    2: {"intensity": 0.73, "sets": 4, "reps": 6, "desc": "Volume Phase - Week 2"},
-    3: {"intensity": 0.76, "sets": 4, "reps": 5, "desc": "Volume Phase - Week 3"},
-    4: {"intensity": 0.65, "sets": 3, "reps": 5, "desc": "Deload Phase - Week 4"},
-    5: {"intensity": 0.80, "sets": 5, "reps": 3, "desc": "Strength Phase - Week 5"},
-    6: {"intensity": 0.84, "sets": 4, "reps": 3, "desc": "Strength Phase - Week 6"},
-    7: {"intensity": 0.88, "sets": 3, "reps": 2, "desc": "Peaking Phase - Week 7"},
-    8: {"intensity": 1.00, "sets": 1, "reps": 1, "desc": "1RM MAX TESTING WEEK"}
-}
-
-accessories_pool = {
-    1: {
-        "Day 1": [("Leg Press", "3", "10", "RPE 7"), ("Romanian Deadlift", "3", "8", "RPE 7"), ("Plank", "3", "45s", "BW")],
-        "Day 2": [("Incline DB Bench", "3", "10", "RPE 7"), ("Barbell Rows", "4", "8", "RPE 8"), ("Face Pulls", "3", "15", "RPE 7")],
-        "Day 3": [("Bulgarian Split Squat", "3", "8/side", "RPE 7"), ("Lat Pulldowns", "3", "12", "RPE 8"), ("Hanging Knee Raises", "3", "12", "BW")]
-    },
-    2: {
-        "Day 1": [("Hack Squat", "3", "10", "RPE 7.5"), ("Good Mornings", "3", "8", "RPE 7"), ("Ab Wheel Rollouts", "3", "10", "BW")],
-        "Day 2": [("Dumbbell Flat Bench", "3", "10", "RPE 7.5"), ("Weighted Pull-ups", "4", "6", "RPE 8"), ("Cable Lateral Raises", "3", "12", "RPE 8")],
-        "Day 3": [("Goblet Squat", "3", "12", "RPE 7"), ("Chest Supported Rows", "3", "10", "RPE 8"), ("Toes to Bar", "3", "8", "BW")]
-    },
-    3: {
-        "Day 1": [("Safety Bar Squat", "3", "8", "RPE 8"), ("Deficit Deadlift", "3", "5", "RPE 7.5"), ("Pallof Press", "3", "12/side", "Tension")],
-        "Day 2": [("Floor Press", "3", "6", "RPE 8"), ("T-Bar Rows", "4", "8", "RPE 8"), ("Reverse Flyes", "3", "15", "RPE 7")],
-        "Day 3": [("Dumbbell Lunges", "3", "10/side", "RPE 8"), ("Seated Cable Rows", "3", "10", "RPE 8"), ("Dragon Flags", "3", "6", "BW")]
-    },
-    4: {
-        "Day 1": [("Leg Extensions", "2", "12", "Light"), ("Lying Leg Curls", "2", "12", "Light"), ("Dead Bug", "2", "10/side", "BW")],
-        "Day 2": [("DB Shoulder Press", "2", "12", "Light"), ("Lat Pulldowns", "2", "12", "Light"), ("Band Pull-Aparts", "2", "20", "Light")],
-        "Day 3": [("Bodyweight Squats", "2", "20", "Mobility"), ("Back Extensions", "2", "12", "Light"), ("Plank", "2", "45s", "BW")]
-    },
-    5: {
-        "Day 1": [("Paused Squat (2s)", "3", "4", "RPE 8"), ("Snatch-Grip Deadlift", "3", "5", "RPE 7.5"), ("Cable Crunch", "3", "12", "Heavy")],
-        "Day 2": [("Close-Grip Bench", "3", "5", "RPE 8"), ("Pendlay Rows", "4", "6", "RPE 8.5"), ("DB Lateral Raises", "3", "12", "RPE 8")],
-        "Day 3": [("Front Squat", "3", "5", "RPE 8"), ("Chin-Ups", "3", "Max-1", "BW"), ("Garhammer Raise", "3", "15", "BW")]
-    },
-    6: {
-        "Day 1": [("Pin Squat", "3", "3", "RPE 8.5"), ("Block Pulls", "3", "4", "RPE 8"), ("Weighted Plank", "3", "60s", "Load")],
-        "Day 2": [("Spoto Press", "3", "4", "RPE 8.5"), ("One-Arm DB Rows", "4", "8", "RPE 8.5"), ("Rear Delt Pulls", "3", "15", "RPE 8")],
-        "Day 3": [("Leg Press", "3", "6", "RPE 8.5"), ("Meadows Rows", "3", "8", "RPE 8.5"), ("Hanging Leg Raises", "3", "10", "BW")]
-    },
-    7: {
-        "Day 1": [("Box Squat", "3", "3", "RPE 8"), ("Stiff-Legged DL", "2", "5", "RPE 8"), ("Ab Wheel Rollouts", "3", "8", "Control")],
-        "Day 2": [("Board Bench Press", "3", "3", "RPE 9"), ("Weighted Pull-ups", "3", "5", "RPE 8.5"), ("Band Face Pulls", "3", "20", "Pump")],
-        "Day 3": [("Leg Press (Heavy)", "3", "6", "RPE 8"), ("Lat Pulldowns", "3", "8", "RPE 8.5"), ("Toes to Bar", "3", "10", "BW")]
-    },
-    8: { 
-        "Day 1": [("Light Leg Curls", "2", "12", "Fluff"), ("Plank", "2", "30s", "Relaxed")],
-        "Day 2": [("Light Lat Pulldowns", "2", "12", "Fluff"), ("Band Pull-Aparts", "2", "15", "Easy")],
-        "Day 3": [("Full Recovery Protocols", "-", "-", "Rest & Hydrate")]
-    }
-}
-
-# Initialize session state for tracking user input data across re-runs
-if "logged_data" not in st.session_state:
-    st.session_state.logged_data = {}
-
-# Week Selection Header Slider
-selected_week = st.selectbox("📅 Choose Your Training Week", [f"Week {i} - {week_configs[i]['desc']}" for i in range(1, 9)])
-w_num = int(selected_week.split(" ")[1])
-
-# Individual Workout Day Selectors
-selected_day = st.tabs(["📆 Day 1: Squat Focus", "📆 Day 2: Bench Focus", "📆 Day 3: Deadlift Focus"])
-
-for idx, day_name in enumerate(["Day 1", "Day 2", "Day 3"]):
-    with selected_day[idx]:
-        if day_name == "Day 1":
-            lift_name, base_1rm = "Squat", squat_1rm
-        elif day_name == "Day 2":
-            lift_name, base_1rm = "Bench Press", bench_1rm
-        else:
-            lift_name, base_1rm = "Deadlift", deadlift_1rm
+        for i, (label, default) in enumerate(maxes):
+            row = i // 2
+            col = (i % 2) * 2
             
-        st.markdown(f"<div class='section-header'>{day_name} Primary Protocol: {lift_name}</div>", unsafe_allow_html=True)
-        
-        # State keys specifically mapped to current week and day
-        main_state_key = f"main_input_{w_num}_{day_name}"
-        acc_state_key = f"acc_input_{w_num}_{day_name}"
-        
-        # --- PRIMARY LIFTS GENERATION ---
-        rows = []
-        if w_num < 8:
-            intensity = week_configs[w_num]["intensity"]
-            rows.append({"Type": "Warmup 1", "Exercise": f"Warmup: {lift_name}", "Sets": 1, "Reps": 8, "Target %": f"{round(intensity * 50)}%", "Calculated Weight": f"{round_weight(base_1rm * intensity * 0.50)} {unit}", "Completed Weight": "", "Rest": "2 min", "Notes": "Focus on clean bar path"})
-            rows.append({"Type": "Warmup 2", "Exercise": f"Warmup: {lift_name}", "Sets": 1, "Reps": 5, "Target %": f"{round(intensity * 70)}%", "Calculated Weight": f"{round_weight(base_1rm * intensity * 0.70)} {unit}", "Completed Weight": "", "Rest": "2 min", "Notes": "Lock in tight abdominal bracing"})
-            rows.append({"Type": "Warmup 3", "Exercise": f"Warmup: {lift_name}", "Sets": 1, "Reps": 3, "Target %": f"{round(intensity * 85)}%", "Calculated Weight": f"{round_weight(base_1rm * intensity * 0.85)} {unit}", "Completed Weight": "", "Rest": "3 min", "Notes": "Match your explosive intent"})
-            rows.append({"Type": "MAIN WORKING SET", "Exercise": lift_name, "Sets": week_configs[w_num]["sets"], "Reps": week_configs[w_num]["reps"], "Target %": f"{round(intensity * 100)}%", "Calculated Weight": f"{round_weight(base_1rm * intensity)} {unit}", "Completed Weight": "", "Rest": "3-5 min", "Notes": "Full working volume load"})
-        else:
-            test_protocol = [
-                ("Test Warmup 1", 5, 0.40, "2 min", "Bar speed evaluation"),
-                ("Test Warmup 2", 3, 0.60, "2 min", "Lock down setup mechanics"),
-                ("Test Warmup 3", 2, 0.75, "3 min", "Neurological priming single"),
-                ("Test Warmup 4", 1, 0.85, "3 min", "Last heavy feel check"),
-                ("1RM ATTEMPT 1", 1, 0.92, "4 min", "The Opener - Easy confident token"),
-                ("1RM ATTEMPT 2", 1, 1.00, "5 min", "PR Match - Ties historical record"),
-                ("1RM ATTEMPT 3", 1, 1.03, "5 min", "New PR Attempt - Overload boundary")
-            ]
-            for t_name, t_reps, t_pct, t_rest, t_note in test_protocol:
-                rows.append({"Type": t_name, "Exercise": f"Max Protocol: {lift_name}", "Sets": 1, "Reps": t_reps, "Target %": f"{round(t_pct * 100)}%", "Calculated Weight": f"{round_weight(base_1rm * t_pct)} {unit}", "Completed Weight": "", "Rest": t_rest, "Notes": t_note})
+            lbl = tk.Label(input_frame, text=label, bg="#1e293b", fg="#f8fafc", font=("Segoe UI", 10))
+            lbl.grid(row=row, column=col, sticky="w", padx=5, pady=5)
+            
+            entry = tk.Entry(input_frame, width=8, bg="#334155", fg="#ffffff", insertbackground="white", font=("Segoe UI", 10, "bold"), justify="center", bd=0, highlightthickness=1, highlightbackground="#475569")
+            entry.insert(0, default)
+            entry.bind("<KeyRelease>", lambda e: self.update_workout())
+            entry.grid(row=row, column=col+1, padx=5, pady=5)
+            self.inputs[label.replace(":", "")] = entry
 
-        df_main = pd.DataFrame(rows)
-        
-        # Load previously saved main-lift data if it exists
-        if main_state_key in st.session_state.logged_data:
-            for idx_row, saved_val in st.session_state.logged_data[main_state_key].items():
-                if idx_row < len(df_main):
-                    df_main.at[idx_row, "Completed Weight"] = saved_val
+        # ------------------- SECTION 2: FILTERS -------------------
+        filter_frame = tk.Frame(self.root, bg="#0f172a")
+        filter_frame.pack(fill="x", padx=15, pady=5)
 
-        # Display Main Lift Table
-        edited_df_main = st.data_editor(
-            df_main, 
-            use_container_width=True, 
-            hide_index=True,
-            key=f"editor_main_{w_num}_{day_name}",
-            disabled=["Type", "Exercise", "Sets", "Reps", "Target %", "Calculated Weight", "Rest", "Notes"]
-        )
-        
-        # Save updates dynamically back to state dictionary
-        for index, row in edited_df_main.iterrows():
-            if row["Completed Weight"] != "":
-                if main_state_key not in st.session_state.logged_data:
-                    st.session_state.logged_data[main_state_key] = {}
-                st.session_state.logged_data[main_state_key][index] = row["Completed Weight"]
+        self.week_var = tk.StringVar(value="Week 1 (5/5/5)")
+        self.week_combo = ttk.Combobox(filter_frame, textvariable=self.week_var, values=list(self.week_data.keys()), state="readonly", font=("Segoe UI", 10))
+        self.week_combo.pack(side="left", expand=True, fill="x", padx=(0, 5))
+        self.week_combo.bind("<<ComboboxSelected>>", lambda e: self.update_workout())
 
+        self.day_var = tk.StringVar(value="Day 1")
+        self.day_combo = ttk.Combobox(filter_frame, textvariable=self.day_var, values=["Day 1", "Day 2", "Day 3"], state="readonly", font=("Segoe UI", 10))
+        self.day_combo.pack(side="left", expand=True, fill="x", padx=(5, 0))
+        self.day_combo.bind("<<ComboboxSelected>>", lambda e: self.update_workout())
 
-        # --- ACCESSORY LIFTS GENERATION ---
-        st.markdown("<div class='section-header'>🔬 Daily Varied Accessory Targets</div>", unsafe_allow_html=True)
-        acc_rows = []
-        for acc in accessories_pool[w_num][day_name]:
-            acc_rows.append({
-                "Accessory Exercise": acc[0],
-                "Target Sets": acc[1],
-                "Target Reps": acc[2],
-                "Intensity Metric": acc[3],
-                "Weight Lifted": "",
-                "Suggested Rest": "1-2 min" if acc[1] != "-" else "-"
-            })
-        df_acc = pd.DataFrame(acc_rows)
-        
-        # Load previously saved accessory data if it exists
-        if acc_state_key in st.session_state.logged_data:
-            for idx_row, saved_val in st.session_state.logged_data[acc_state_key].items():
-                if idx_row < len(df_acc):
-                    df_acc.at[idx_row, "Weight Lifted"] = saved_val
+        # ------------------- SECTION 3: DISPLAY CANVAS -------------------
+        # Scrollable output area to look and feel like an app feed
+        canvas_container = tk.Frame(self.root, bg="#0f172a")
+        canvas_container.pack(fill="both", expand=True, padx=15, pady=10)
 
-        # Display Accessory Table
-        edited_df_acc = st.data_editor(
-            df_acc, 
-            use_container_width=True, 
-            hide_index=True,
-            key=f"editor_acc_{w_num}_{day_name}",
-            disabled=["Accessory Exercise", "Target Sets", "Target Reps", "Intensity Metric", "Suggested Rest"]
-        )
+        self.canvas = tk.Canvas(canvas_container, bg="#0f172a", highlightthickness=0)
+        scrollbar = ttk.Scrollbar(canvas_container, orient="vertical", command=self.canvas.yview)
+        self.scrollable_frame = tk.Frame(self.canvas, bg="#0f172a")
 
-        # Save updates dynamically back to state dictionary
-        for index, row in edited_df_acc.iterrows():
-            if row["Weight Lifted"] != "":
-                if acc_state_key not in st.session_state.logged_data:
-                    st.session_state.logged_data[acc_state_key] = {}
-                st.session_state.logged_data[acc_state_key][index] = row["Weight Lifted"]
+        self.scrollable_frame.bind("<Configure>", lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all")))
+        self.canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw")
+        self.canvas.configure(yscrollcommand=scrollbar.set)
 
-st.markdown("---")
-st.caption("💪 Handcrafted for Powerlifters. Update your 1RM values in the sidebar panel anytime to instantly recalculate your targets.")
+        self.canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+
+    def round_weight(self, weight):
+        # MROUND-style execution safely rounding to nearest 0.5 units
+        return round(weight * 2) / 2
+
+    def update_workout(self):
+        # Wipe old widgets clean
+        for widget in self.scrollable_frame.winfo_children():
+            widget.destroy()
+
+        # Grab context parameters
+        week = self.week_var.get()
+        day = self.day_var.get()
+        meta = self.week_data[week]
+
+        try:
+            tms = {
+                "Squat": float(self.inputs["Squat"].get() or 0) * 0.9,
+                "Bench": float(self.inputs["Bench"].get() or 0) * 0.9,
+                "Deadlift": float(self.inputs["Deadlift"].get() or 0) * 0.9,
+                "OHP": float(self.inputs["OHP"].get() or 0) * 0.9
+            }
+        except ValueError:
+            return # Block calculations if user enters letters or symbols cleanly
+
+        # Determine daily main lifts split configuration
+        current_lifts = ["Squat", "Bench"] if day in ["Day 1", "Day 3"] else ["Deadlift", "OHP"]
+
+        # Step 1 Display: Mobility Prompt
+        mob_lbl = tk.Label(self.scrollable_frame, text="➔ Step 1: Mobility Warmup (10 Mins done)", bg="#064e3b", fg="#a7f3d0", font=("Segoe UI", 9, "italic"), anchor="w", padx=5, pady=3)
+        mob_lbl.pack(fill="x", pady=(0, 10))
+
+        # Step 2 Display: Main Barbell Blocks
+        for lift in current_lifts:
+            lift_frame = tk.Frame(self.scrollable_frame, bg="#1e293b", bd=1, highlightthickness=1, highlightbackground="#334155", padx=8, pady=8)
+            lift_frame.pack(fill="x", pady=5)
+
+            tm = tms[lift]
+            tk.Label(lift_frame, text=f"{lift.upper()} (TM: {self.round_weight(tm)})", bg="#1e293b", fg="#38bdf8", font=("Segoe UI", 10, "bold")).pack(anchor="w")
+
+            # Warmups Render loop
+            for idx, pct in enumerate(meta["w"]):
+                reps = "3" if idx == 2 else "5"
+                wt = self.round_weight(tm * pct)
+                tk.Label(lift_frame, text=f"  Warmup {idx+1}:  {int(pct*100)}%  ➔  {wt} kg/lbs  x  {reps}", bg="#1e293b", fg="#94a3b8", font=("Segoe UI", 9)).pack(anchor="w")
+
+            # Working Sets Render loop
+            for idx, pct in enumerate(meta["s"]):
+                is_amrap = idx == 2 and week != "Week 4 (Deload)"
+                reps = meta["reps"][idx]
+                label = f"  Work Set {idx+1} (+):" if is_amrap else f"  Work Set {idx+1}:  "
+                color = "#f59e0b" if is_amrap else "#e2e8f0"
+                wt = self.round_weight(tm * pct)
+                tk.Label(lift_frame, text=f"{label}  {int(pct*100)}%  ➔  {wt} kg/lbs  x  {reps}", bg="#1e293b", fg=color, font=("Segoe UI", 9, "bold" if is_amrap else "normal")).pack(anchor="w")
+
+            # First Set Last Volume append
+            if meta["fsl"]:
+                fsl_wt = self.round_weight(tm * meta["fsl"])
+                tk.Label(lift_frame, text=f"  FSL Volume:  {int(meta['fsl']*100)}%  ➔  {fsl_wt} kg/lbs  x  5x5", bg="#1e293b", fg="#34d399", font=("Segoe UI", 9, "bold")).pack(anchor="w")
+
+        # Step 3 Display: Rotating Dynamic Accessories
+        acc_frame = tk.Frame(self.scrollable_frame, bg="#1e293b", bd=1, highlightthickness=1, highlightbackground="#334155", padx=8, pady=8)
+        acc_frame.pack(fill="x", pady=10)
+        tk.Label(acc_frame, text="STEP 3: DAILY ACCESSORIES", bg="#1e293b", fg="#c084fc", font=("Segoe UI", 10, "bold")).pack(anchor="w", pady=(0, 5))
+
+        for name, sets, cat in self.accessory_matrix[week][day]:
+            tk.Label(acc_frame, text=f" • [{cat}] {name} ➔ {sets}", bg="#1e293b", fg="#e2e8f0", font=("Segoe UI", 9)).pack(anchor="w", pady=2)
+
+        # Step 4 Display: Recovery Stretch Prompt
+        str_lbl = tk.Label(self.scrollable_frame, text="➔ Step 4: Post-Workout Static Stretching (Done)", bg="#7f1d1d", fg="#fca5a5", font=("Segoe UI", 9, "italic"), anchor="w", padx=5, pady=3)
+        str_lbl.pack(fill="x", pady=(5, 0))
+
+if __name__ == "__main__":
+    window = tk.Tk()
+    app = Beginner531App(window)
+    window.mainloop()

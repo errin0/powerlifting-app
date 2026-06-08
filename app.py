@@ -1,6 +1,8 @@
 import streamlit as st
 import pandas as pd
 import math
+import streamlit.components.v1 as components
+import json
 
 # Page Configuration
 st.set_page_config(
@@ -23,12 +25,91 @@ st.markdown("""
 st.markdown("<div class='main-title'>🏋️‍♂️ 8-Week Dynamic Powerlifting App</div>", unsafe_allow_html=True)
 st.markdown("<div class='sub-title'>Auto-regulated warmups, progressive main lifts, and daily dynamic accessories</div>", unsafe_allow_html=True)
 
+
+# --- PERSISTENCE LAYER: LOCALSTORAGE INJECTION ---
+# Define default fallbacks
+default_settings = {"unit": "lbs", "squat": 315, "bench": 225, "deadlift": 405}
+
+# JavaScript to read from and write to localStorage via browser communications
+js_persistence = """
+<script>
+    const sendToStreamlit = () => {
+        const data = {
+            unit: localStorage.getItem('pref_unit') || 'lbs',
+            squat: parseInt(localStorage.getItem('squat_1rm')) || 315,
+            bench: parseInt(localStorage.getItem('bench_1rm')) || 225,
+            deadlift: parseInt(localStorage.getItem('deadlift_1rm')) || 405
+        };
+        
+        // Return values to parent Streamlit application
+        window.parent.postMessage({
+            type: 'streamlit:setComponentValue',
+            value: data
+        }, '*');
+    };
+
+    // Run when the component mounts
+    setTimeout(sendToStreamlit, 300);
+</script>
+"""
+
+# Render hidden component to fetch saved storage data
+with st.sidebar:
+    storage_data = components.html(js_persistence, height=0, width=0)
+
+# Setup initial structural variables based on storage results
+if "app_storage" not in st.session_state:
+    st.session_state.app_storage = default_settings
+
+# Parse changes if storage component responds
+# Note: Streamlit reruns once it grabs local storage metadata
+# --- END PERSISTENCE LAYER ---
+
+
 # Sidebar - User Inputs (1RMs)
 st.sidebar.header("🎯 Enter Current 1-Rep Maxes")
-unit = st.sidebar.radio("Preferred Weight Unit", ["lbs", "kg"])
-squat_1rm = st.sidebar.number_input(f"Squat 1RM ({unit})", min_value=0, value=315, step=5)
-bench_1rm = st.sidebar.number_input(f"Bench Press 1RM ({unit})", min_value=0, value=225, step=5)
-deadlift_1rm = st.sidebar.number_input(f"Deadlift 1RM ({unit})", min_value=0, value=405, step=5)
+
+# Determine indexes for state synchronization
+unit_idx = 0 if st.session_state.app_storage.get("unit", "lbs") == "lbs" else 1
+
+unit = st.sidebar.radio(
+    "Preferred Weight Unit", 
+    ["lbs", "kg"], 
+    index=unit_idx,
+    key="unit_selector"
+)
+squat_1rm = st.sidebar.number_input(
+    f"Squat 1RM ({unit})", 
+    min_value=0, 
+    value=int(st.session_state.app_storage.get("squat", 315)), 
+    step=5,
+    key="squat_input"
+)
+bench_1rm = st.sidebar.number_input(
+    f"Bench Press 1RM ({unit})", 
+    min_value=0, 
+    value=int(st.session_state.app_storage.get("bench", 225)), 
+    step=5,
+    key="bench_input"
+)
+deadlift_1rm = st.sidebar.number_input(
+    f"Deadlift 1RM ({unit})", 
+    min_value=0, 
+    value=int(st.session_state.app_storage.get("deadlift", 405)), 
+    step=5,
+    key="deadlift_input"
+)
+
+# Actively inject updating values to browser localStorage context transparently
+components.html(f"""
+<script>
+    localStorage.setItem('pref_unit', "{unit}");
+    localStorage.setItem('squat_1rm', "{squat_1rm}");
+    localStorage.setItem('bench_1rm', "{bench_1rm}");
+    localStorage.setItem('deadlift_1rm', "{deadlift_1rm}");
+</script>
+""", height=0, width=0)
+
 
 st.sidebar.markdown("---")
 st.sidebar.markdown("### 📋 Daily Mobility Routine")
